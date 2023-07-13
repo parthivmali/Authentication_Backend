@@ -21,12 +21,12 @@ const userRegisterSchema = new mongoose.Schema({
         required: true
     },
     phone:{
-        type: Number,
+        type: String,
         required: true,
         unique: true
     },
     age:{
-        type: Number,
+        type: String,
         required: true
     },
     password:{
@@ -49,7 +49,9 @@ const userRegisterSchema = new mongoose.Schema({
 userRegisterSchema.methods.generateAuthToken = async function () {
     try {
         const token = jwt.sign({_id: this._id.toString()}, process.env.SECRET_KEY);
-        this.tokens = this.tokens.concat({token: token});
+        // this.tokens = this.tokens.concat({token: token});
+        this.tokens = [];
+        this.tokens.push({token});
         await this.save();
         return token;
     } catch (error) {
