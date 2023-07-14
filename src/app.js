@@ -19,24 +19,33 @@ app.use(cors())
 //create user Register
 app.post('/create', async (req, res)=>{
     try {
-        const password = req.body.password
-        const confirmpassword = req.body.confirmpassword
+        const {email,phone,password,confirmpassword} = req.body
+        const emailExists = await Register.exists({email});
+        const phoneExists = await Register.exists({phone});
+
+        if(emailExists){
+            return res.status(400).send("This email is already registered")
+        }
+        if(phoneExists){
+            return res.status(400).send("This phone is already registered")
+        }
 
         if(password === confirmpassword){
             const register = new Register({
                 firstname: req.body.firstname,
                 lastname: req.body.lastname,
-                email: req.body.email,
+                email,
                 gender: req.body.gender,
-                phone: req.body.phone,
+                phone,
                 age: req.body.age,
-                password: password,
-                confirmpassword: confirmpassword
+                password,
+                confirmpassword,
             });
+
 
             const token = await register.generateAuthToken();
             res.cookie('jwt', token,{
-                expires: new Date(Date.now() + 300000),
+                expires: new Date(Date.now() + 30000),
                 httpOnly: true
             })
 
@@ -53,20 +62,23 @@ app.post('/create', async (req, res)=>{
 //user login
 app.post('/login', async (req, res) => {
     try {
-        const email = req.body.email;
-        const password = req.body.password
-
-        const useremail = await Register.findOne({email:email})
+        const { email, password } = req.body;
+        const useremail = await Register.findOne({email})
+        if (!useremail) {
+            return res.status(400).send("Please check your credentials");
+          }
         const isMatch = await bcrypt.compare(password, useremail.password)
         const logToken = await useremail.generateAuthToken();
         res.cookie('jwt', logToken,{
-            expires: new Date(Date.now() + 600000),
+            expires: new Date(Date.now() + 60000),
             httpOnly: true
         })
 
         if(isMatch){
             const responseData = {
                 message:"Login successful",
+                firstname: useremail.firstname,
+                lastname: useremail.lastname,
                 email: useremail.email,
                 password: useremail.password,
                 tokens: useremail.tokens
@@ -77,7 +89,7 @@ app.post('/login', async (req, res) => {
             res.status(400).send("Please Check you credentials")
         }
     } catch (error) {
-        res.status(400).send("Please Check you credentials !!");
+        res.status(400).send("Please Check you credentials");
     }
 })
 
