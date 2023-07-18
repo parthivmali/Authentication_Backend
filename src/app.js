@@ -1,13 +1,14 @@
 const express = require('express');
 const app = express();
 const Register = require('./models/registers');
+const Otp = require('./models/otp')
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const auth = require('./middleware/auth');
 require('./db/connection')
 require('dotenv').config();
-
+const nodemailer = require('nodemailer');
 const PORT = process.env.PORT || 3000
 
 app.use(express.json());
@@ -93,6 +94,106 @@ app.post('/login', async (req, res) => {
     }
 })
 
+app.post('/email-send', async (req, res) => {
+    try {
+        const data = await Register.findOne({ email: req.body.email });
+        const response = {};
+    
+        if (data) {
+            const otpCode = Math.floor((Math.random() * 10000) + 1);
+            let otpData = new Otp({
+                email: req.body.email,
+                code: otpCode,
+                expireIn: new Date().getTime() + 300 * 1000
+            });
+            const otpResponse = await otpData.save();
+            mailer(req.body.email,req.body.password,otpCode);
+            response.statusText = "success";
+            response.message = "Please check your email id";
+            res.status(200).json(response);     
+        } else {
+            response.statusText = "error";
+            response.message = "Email id not exist";
+            res.status(404).json(response);
+        }
+    
+    } catch (error) {
+        console.log(error.message);
+        res.status(500).json({ error: 'An error occurred while processing your request.' });
+    }
+});
+
+app.post('/reset-password', async (req, res) => {
+    try {
+        const { code, password, confirmpassword } = req.body;
+        console.log("otp =>",code);
+        if (password !== confirmpassword) {
+            res.status(400).send({ message: "Passwords do not match", statusText: "error" });
+            return;
+        }
+    
+        const data = await Otp.findOne({code});
+        const response = {};    
+    
+        if (data) {
+            const currentTime = new Date().getTime();
+            const diff = data.expireIn - currentTime;
+            if (diff < 0) {
+                response.message = 'Token expired';
+                response.statusText = 'error';
+                res.status(400).json(response);
+                
+            } else {
+                const user = await Register.findOne({email:data.email});
+                if (!user) {
+                    response.message = 'User not found';
+                    response.statusText = 'error';
+                    res.status(404).json(response);
+                } else {
+                    user.password = req.body.password;
+                    await user.save();
+                    response.message = 'Password changed successfully';
+                    response.statusText = 'success';
+                    res.status(200).send(response);
+                }
+            }
+        } else {
+            response.message = 'Invalid Otp';
+            response.statusText = 'error';
+            res.status(404).json(response);
+        }
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).send({ message: 'Internal server error', statusText: 'error' });
+    }
+});
+
+const mailer = (email,Otp) => {
+    const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        port: 587,
+        secure: false,
+        auth: {
+            user: "USER_EMAIL",
+            pass: "USER_PASS"
+        }
+    });
+
+    const mailOptions = {
+        from: "USER_EMAIL",
+        to: email,
+        subject:'Sending email using node js',
+        text:'Thank You sir!'
+    };
+
+    transporter.sendMail(mailOptions, function(error, info){
+        if(error){
+            console.log("transporter error =>",error);
+        }else{
+            console.log('email sent =>', info.response );
+        }
+    })
+}
 
 app.listen(PORT, () => {
     console.log(`server is running on this ${PORT} port`);
