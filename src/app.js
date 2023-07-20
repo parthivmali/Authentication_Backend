@@ -78,9 +78,13 @@ app.post('/login', async (req, res) => {
         if(isMatch){
             const responseData = {
                 message:"Login successful",
+                _id : useremail._id,
                 firstname: useremail.firstname,
                 lastname: useremail.lastname,
                 email: useremail.email,
+                phone: useremail.phone,
+                age: useremail.age,
+                gender: useremail.gender,
                 password: useremail.password,
                 tokens: useremail.tokens
               };
@@ -94,20 +98,57 @@ app.post('/login', async (req, res) => {
     }
 })
 
+// Get single Register user  
+app.get('/user/:id',async (req, res) => {
+    try {
+        const _id = req.params.id
+        const editData = await Register.findById(_id);
+        if(editData){
+            res.status(200).send(editData);
+        }else{
+            res.status(404).send("Not Found");
+        }
+    } catch (error) {
+        console.log("error",error.message);
+    }
+})
+
+//Update single student data
+app.patch('/update/:id',async (req, res) => {
+    try {
+        const _id = req.params.id
+        const updateData = req.body
+        if(Object.keys(updateData).length === 0){
+            return res.status(400).send("No update data provided.");
+        }
+        const updateUser = await Register.findByIdAndUpdate(_id, updateData, {
+            new:true
+        })
+        const response = {
+            message: "User update successful",
+            user: updateUser
+        };
+        res.status(200).send(response);
+    } catch (error) {
+        res.status(400).send(error);
+    }
+})
+
+// Forgot password -> Send Email 
 app.post('/email-send', async (req, res) => {
     try {
         const data = await Register.findOne({ email: req.body.email });
         const response = {};
     
         if (data) {
-            const otpCode = Math.floor((Math.random() * 10000) + 1);
+            const otpCode = Math.floor(1000 + Math.random() * 9000);
             let otpData = new Otp({
                 email: req.body.email,
                 code: otpCode,
-                expireIn: new Date().getTime() + 300 * 1000
+                expireIn: new Date().getTime() + 300 * 1000 //current timestamp plus 300,000 milliseconds (300 seconds or 5 minutes). 
             });
             const otpResponse = await otpData.save();
-            mailer(req.body.email,req.body.password,otpCode);
+            mailer(req.body.email,otpCode);
             response.statusText = "success";
             response.message = "Please check your email id";
             res.status(200).json(response);     
@@ -123,10 +164,10 @@ app.post('/email-send', async (req, res) => {
     }
 });
 
+// Reset Password (New Password)
 app.post('/reset-password', async (req, res) => {
     try {
         const { code, password, confirmpassword } = req.body;
-        console.log("otp =>",code);
         if (password !== confirmpassword) {
             res.status(400).send({ message: "Passwords do not match", statusText: "error" });
             return;
@@ -152,8 +193,8 @@ app.post('/reset-password', async (req, res) => {
                 } else {
                     user.password = req.body.password;
                     await user.save();
-                    response.message = 'Password changed successfully';
                     response.statusText = 'success';
+                    response.message = 'Password changed successfully';
                     res.status(200).send(response);
                 }
             }
@@ -168,22 +209,34 @@ app.post('/reset-password', async (req, res) => {
     }
 });
 
-const mailer = (email,Otp) => {
+const mailer = (email,otpCode) => {
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         port: 587,
         secure: false,
         auth: {
-            user: "USER_EMAIL",
-            pass: "USER_PASS"
+            user: process.env.USER_EMAIL,
+            pass: process.env.USER_PASS
         }
     });
 
     const mailOptions = {
-        from: "USER_EMAIL",
+        from: process.env.USER_EMAIL,
         to: email,
-        subject:'Sending email using node js',
-        text:'Thank You sir!'
+        subject: 'Reset Your Password - OTP Verification',
+        text: `Dear User,\n\nYou have requested to reset your password. Please use the following OTP code to proceed with the password reset process:\n\nOTP Code: ${otpCode}\n\nThis OTP is valid for the next 5 minutes.\n\nIf you did not request this password reset, you can safely ignore this email.\n\nBest regards,\nYour Application Team`,
+        html: `
+            <div style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+                <h2 style="color: #0056b3;">Reset Your Password - OTP Verification</h2>
+                <p>Dear User,</p>
+                <p>You have requested to reset your password. Please use the following OTP code to proceed with the password reset process:</p>
+                <p style="font-weight: bold; font-size: 18px; background-color: #e8e8e8; padding: 10px;">OTP Code: ${otpCode}</p>
+                <p style="font-size: 14px;">This OTP is valid for the next 5 minutes.</p>
+                <p>If you did not request this password reset, you can safely ignore this email.</p>
+                <p>Best regards,</p>
+                <p>Your Application Team</p>
+            </div>
+        `
     };
 
     transporter.sendMail(mailOptions, function(error, info){
